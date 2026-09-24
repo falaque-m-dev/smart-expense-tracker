@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Expense Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-wrapper">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-icon">💸</span>
+        <span class="brand-name">ExpenseIQ</span>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#dashboard" class="nav-item active">
+          <span class="nav-icon">📊</span> Dashboard
+        </a>
+        <a href="#add-expense" class="nav-item">
+          <span class="nav-icon">➕</span> Add Expense
+        </a>
+        <a href="#receipt-parser" class="nav-item">
+          <span class="nav-icon">🧾</span> Receipt Parser
+        </a>
+        <a href="#history" class="nav-item">
+          <span class="nav-icon">📋</span> History
+        </a>
+      </nav>
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <main class="main-content">
+
+      <!-- Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="page-title" id="dashboard">Dashboard</h1>
+          <p class="page-subtitle">Track, parse, and manage your expenses</p>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-outline" id="clearAllBtn">🗑 Clear All</button>
+        </div>
+      </header>
+
+      <!-- ── Budget Metrics ── -->
+      <section class="metrics-grid">
+        <div class="metric-card metric-budget">
+          <div class="metric-icon">🎯</div>
+          <div class="metric-body">
+            <p class="metric-label">Monthly Budget</p>
+            <div class="metric-value-row">
+              <span class="metric-value" id="budgetDisplay">$0.00</span>
+              <button class="btn-icon" id="editBudgetBtn" title="Edit budget">✏️</button>
+            </div>
+            <input type="number" id="budgetInput" class="inline-input hidden"
+              placeholder="Enter budget" min="0" step="0.01" />
+          </div>
+        </div>
+
+        <div class="metric-card metric-spent">
+          <div class="metric-icon">💳</div>
+          <div class="metric-body">
+            <p class="metric-label">Total Spent</p>
+            <span class="metric-value" id="totalSpent">$0.00</span>
+          </div>
+        </div>
+
+        <div class="metric-card metric-remaining" id="remainingCard">
+          <div class="metric-icon">✅</div>
+          <div class="metric-body">
+            <p class="metric-label">Remaining</p>
+            <span class="metric-value" id="remaining">$0.00</span>
+          </div>
+        </div>
+
+        <div class="metric-card metric-count">
+          <div class="metric-icon">📈</div>
+          <div class="metric-body">
+            <p class="metric-label">Transactions</p>
+            <span class="metric-value" id="txCount">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Budget Progress Bar -->
+      <section class="progress-section">
+        <div class="progress-header">
+          <span>Budget Used</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </section>
+
+      <!-- ── Two-column layout: Form + Receipt Parser ── -->
+      <div class="two-col">
+
+        <!-- Add Expense Form -->
+        <section class="card" id="add-expense">
+          <h2 class="card-title">➕ Add Expense</h2>
+          <form id="expenseForm" class="expense-form" novalidate>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="amount">Amount ($) <span class="required">*</span></label>
+                <input type="number" id="amount" placeholder="0.00"
+                  min="0.01" step="0.01" required />
+                <span class="field-error" id="amountError"></span>
+              </div>
+              <div class="form-group">
+                <label for="category">Category <span class="required">*</span></label>
+                <select id="category" required>
+                  <option value="">Select category</option>
+                  <option value="Food & Dining">🍔 Food &amp; Dining</option>
+                  <option value="Transport">🚗 Transport</option>
+                  <option value="Shopping">🛍 Shopping</option>
+                  <option value="Entertainment">🎬 Entertainment</option>
+                  <option value="Health">💊 Health</option>
+                  <option value="Utilities">💡 Utilities</option>
+                  <option value="Housing">🏠 Housing</option>
+                  <option value="Education">📚 Education</option>
+                  <option value="Travel">✈️ Travel</option>
+                  <option value="Other">📦 Other</option>
+                </select>
+                <span class="field-error" id="categoryError"></span>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="date">Date <span class="required">*</span></label>
+                <input type="date" id="date" required />
+                <span class="field-error" id="dateError"></span>
+              </div>
+              <div class="form-group">
+                <label for="description">Description</label>
+                <input type="text" id="description" placeholder="Optional note…" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-ghost" id="resetFormBtn">Reset</button>
+              <button type="submit" class="btn btn-primary" id="submitBtn">
+                <span id="submitLabel">Add Expense</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Receipt Parser -->
+        <section class="card" id="receipt-parser">
+          <h2 class="card-title">🧾 Receipt Parser</h2>
+          <p class="card-desc">Paste raw receipt text below — the parser will auto-fill the form.</p>
+          <textarea id="receiptText" class="receipt-textarea"
+            placeholder="e.g.&#10;WALMART SUPERCENTER&#10;Date: 09/15/2026&#10;Items: Groceries&#10;TOTAL: $47.93&#10;Thank you!"></textarea>
+          <div class="receipt-actions">
+            <button class="btn btn-secondary" id="parseReceiptBtn">🔍 Parse Receipt</button>
+            <button class="btn btn-ghost" id="clearReceiptBtn">Clear</button>
+          </div>
+          <div id="parseResult" class="parse-result hidden">
+            <h3 class="parse-result-title">Parsed Fields</h3>
+            <div class="parsed-fields" id="parsedFields"></div>
+            <p class="parse-hint">Review the form above, then click <strong>Add Expense</strong>.</p>
+          </div>
+          <div id="parseError" class="parse-error hidden"></div>
+        </section>
+
+      </div><!-- /two-col -->
+
+      <!-- ── Expense History ── -->
+      <section class="card" id="history">
+        <div class="history-header">
+          <h2 class="card-title">📋 Expense History</h2>
+          <div class="history-controls">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔎 Search expenses…" />
+            <select id="filterCategory" class="filter-select">
+              <option value="">All Categories</option>
+              <option value="Food & Dining">Food &amp; Dining</option>
+              <option value="Transport">Transport</option>
+              <option value="Shopping">Shopping</option>
+              <option value="Entertainment">Entertainment</option>
+              <option value="Health">Health</option>
+              <option value="Utilities">Utilities</option>
+              <option value="Housing">Housing</option>
+              <option value="Education">Education</option>
+              <option value="Travel">Travel</option>
+              <option value="Other">Other</option>
+            </select>
+            <select id="sortBy" class="filter-select">
+              <option value="date-desc">Newest First</option>
+              <option value="date-asc">Oldest First</option>
+              <option value="amount-desc">Highest Amount</option>
+              <option value="amount-asc">Lowest Amount</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="expenseTableWrapper">
+          <table class="expense-table" id="expenseTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="expenseTableBody"></tbody>
+          </table>
+          <div class="empty-state hidden" id="emptyState">
+            <div class="empty-icon">📭</div>
+            <p>No expenses yet. Add your first one above!</p>
+          </div>
+        </div>
+      </section>
+
+    </main><!-- /main-content -->
+  </div><!-- /app-wrapper -->
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
