@@ -3,224 +3,369 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Expense Tracker</title>
+  <title>ExpenseIQ — Smart Expense Tracker</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <!-- ── Mobile top bar ── -->
+  <div class="mobile-topbar" aria-hidden="true">
+    <div class="mobile-brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M2 10h20" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="7" cy="15" r="1.2" fill="currentColor"/>
+      </svg>
+      <span class="brand-name">ExpenseIQ</span>
+    </div>
+    <button class="hamburger" id="menuToggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+
+  <!-- ── Sidebar overlay (mobile) ── -->
+  <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+
   <div class="app-wrapper">
 
     <!-- ── Sidebar ── -->
-    <aside class="sidebar">
-      <div class="sidebar-brand">
-        <span class="brand-icon">💸</span>
+    <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+      <div class="sidebar-brand" aria-hidden="true">
+        <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M2 10h20" stroke="currentColor" stroke-width="1.6"/>
+          <circle cx="7" cy="15" r="1.2" fill="currentColor"/>
+        </svg>
         <span class="brand-name">ExpenseIQ</span>
       </div>
-      <nav class="sidebar-nav">
-        <a href="#dashboard" class="nav-item active">
-          <span class="nav-icon">📊</span> Dashboard
-        </a>
-        <a href="#add-expense" class="nav-item">
-          <span class="nav-icon">➕</span> Add Expense
-        </a>
-        <a href="#receipt-parser" class="nav-item">
-          <span class="nav-icon">🧾</span> Receipt Parser
-        </a>
-        <a href="#history" class="nav-item">
-          <span class="nav-icon">📋</span> History
-        </a>
+
+      <nav>
+        <ul class="sidebar-nav" role="list">
+          <li>
+            <a href="#section-dashboard" class="nav-item" data-section="section-dashboard">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="2" y="2" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                <rect x="11" y="2" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                <rect x="2" y="11" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                <rect x="11" y="11" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+              <span class="nav-label">Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="#section-add" class="nav-item" data-section="section-add">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M10 6v8M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span class="nav-label">Add Expense</span>
+            </a>
+          </li>
+          <li>
+            <a href="#section-parser" class="nav-item" data-section="section-parser">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M5 3h10a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span class="nav-label">Receipt Parser</span>
+            </a>
+          </li>
+          <li>
+            <a href="#section-history" class="nav-item" data-section="section-history">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M3 5h14M3 10h14M3 15h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span class="nav-label">History</span>
+            </a>
+          </li>
+        </ul>
       </nav>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-clear-btn" id="clearAllBtn" aria-label="Clear all expenses">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" width="16" height="16">
+            <path d="M5 6h10l-1 10H6L5 6z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            <path d="M3 6h14M8 6V4h4v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="nav-label">Clear All</span>
+        </button>
+      </div>
     </aside>
 
     <!-- ── Main Content ── -->
-    <main class="main-content">
+    <main class="main-content" id="main-content">
 
-      <!-- Header -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <h1 class="page-title" id="dashboard">Dashboard</h1>
-          <p class="page-subtitle">Track, parse, and manage your expenses</p>
-        </div>
-        <div class="topbar-right">
-          <button class="btn btn-outline" id="clearAllBtn">🗑 Clear All</button>
-        </div>
-      </header>
+      <!-- ── Dashboard section ── -->
+      <section id="section-dashboard" class="page-section" aria-labelledby="heading-dashboard" tabindex="-1">
 
-      <!-- ── Budget Metrics ── -->
-      <section class="metrics-grid">
-        <div class="metric-card metric-budget">
-          <div class="metric-icon">🎯</div>
-          <div class="metric-body">
-            <p class="metric-label">Monthly Budget</p>
-            <div class="metric-value-row">
-              <span class="metric-value" id="budgetDisplay">$0.00</span>
-              <button class="btn-icon" id="editBudgetBtn" title="Edit budget">✏️</button>
+        <header class="page-header">
+          <div>
+            <h1 class="page-title" id="heading-dashboard">Dashboard</h1>
+            <p class="page-subtitle">Track, parse, and manage your expenses</p>
+          </div>
+        </header>
+
+        <!-- Metric cards -->
+        <div class="metrics-grid" role="list" aria-label="Budget summary">
+
+          <div class="metric-card metric-budget" role="listitem">
+            <div class="metric-header">
+              <span class="metric-label">Monthly Budget</span>
+              <button class="edit-budget-btn" id="editBudgetBtn"
+                aria-label="Edit monthly budget" title="Edit budget">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="14" height="14">
+                  <path d="M11.5 2.5a1.5 1.5 0 0 1 2 2L5 13H3v-2L11.5 2.5z"
+                    stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
-            <input type="number" id="budgetInput" class="inline-input hidden"
-              placeholder="Enter budget" min="0" step="0.01" />
+            <p class="metric-value" id="budgetDisplay">$0.00</p>
+            <input type="number" id="budgetInput" class="budget-inline-input hidden"
+              placeholder="0.00" min="0" step="0.01"
+              aria-label="Set monthly budget amount" />
+          </div>
+
+          <div class="metric-card metric-spent" role="listitem">
+            <div class="metric-header">
+              <span class="metric-label">Total Spent</span>
+            </div>
+            <p class="metric-value" id="totalSpent">$0.00</p>
+          </div>
+
+          <div class="metric-card metric-remaining" id="remainingCard" role="listitem">
+            <div class="metric-header">
+              <span class="metric-label">Remaining</span>
+            </div>
+            <p class="metric-value" id="remaining">$0.00</p>
+          </div>
+
+          <div class="metric-card metric-count" role="listitem">
+            <div class="metric-header">
+              <span class="metric-label">Transactions</span>
+            </div>
+            <p class="metric-value" id="txCount">0</p>
+          </div>
+
+        </div>
+
+        <!-- Budget progress -->
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span class="progress-label">Budget used</span>
+            <span class="progress-pct" id="progressPercent" aria-live="polite">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar"
+            aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+            aria-label="Budget usage" id="progressTrack">
+            <div class="progress-fill" id="progressFill"></div>
           </div>
         </div>
 
-        <div class="metric-card metric-spent">
-          <div class="metric-icon">💳</div>
-          <div class="metric-body">
-            <p class="metric-label">Total Spent</p>
-            <span class="metric-value" id="totalSpent">$0.00</span>
-          </div>
-        </div>
-
-        <div class="metric-card metric-remaining" id="remainingCard">
-          <div class="metric-icon">✅</div>
-          <div class="metric-body">
-            <p class="metric-label">Remaining</p>
-            <span class="metric-value" id="remaining">$0.00</span>
-          </div>
-        </div>
-
-        <div class="metric-card metric-count">
-          <div class="metric-icon">📈</div>
-          <div class="metric-body">
-            <p class="metric-label">Transactions</p>
-            <span class="metric-value" id="txCount">0</span>
-          </div>
-        </div>
       </section>
 
-      <!-- Budget Progress Bar -->
-      <section class="progress-section">
-        <div class="progress-header">
-          <span>Budget Used</span>
-          <span id="progressPercent">0%</span>
-        </div>
-        <div class="progress-track">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-      </section>
+      <!-- ── Add Expense section ── -->
+      <section id="section-add" class="page-section" aria-labelledby="heading-add" tabindex="-1">
+        <h2 class="section-title" id="heading-add">Add Expense</h2>
 
-      <!-- ── Two-column layout: Form + Receipt Parser ── -->
-      <div class="two-col">
+        <div class="form-card">
+          <form id="expenseForm" novalidate autocomplete="off">
 
-        <!-- Add Expense Form -->
-        <section class="card" id="add-expense">
-          <h2 class="card-title">➕ Add Expense</h2>
-          <form id="expenseForm" class="expense-form" novalidate>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="amount">Amount ($) <span class="required">*</span></label>
-                <input type="number" id="amount" placeholder="0.00"
-                  min="0.01" step="0.01" required />
-                <span class="field-error" id="amountError"></span>
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-label" for="amount">
+                  Amount <abbr title="required" aria-hidden="true">*</abbr>
+                </label>
+                <div class="input-prefix-wrap">
+                  <span class="input-prefix" aria-hidden="true">$</span>
+                  <input type="number" id="amount" class="field-input input-prefixed"
+                    placeholder="0.00" min="0.01" step="0.01"
+                    required aria-required="true"
+                    aria-describedby="amountError" />
+                </div>
+                <span class="field-error" id="amountError" role="alert" aria-live="polite"></span>
               </div>
-              <div class="form-group">
-                <label for="category">Category <span class="required">*</span></label>
-                <select id="category" required>
-                  <option value="">Select category</option>
-                  <option value="Food & Dining">🍔 Food &amp; Dining</option>
-                  <option value="Transport">🚗 Transport</option>
-                  <option value="Shopping">🛍 Shopping</option>
-                  <option value="Entertainment">🎬 Entertainment</option>
-                  <option value="Health">💊 Health</option>
-                  <option value="Utilities">💡 Utilities</option>
-                  <option value="Housing">🏠 Housing</option>
-                  <option value="Education">📚 Education</option>
-                  <option value="Travel">✈️ Travel</option>
-                  <option value="Other">📦 Other</option>
-                </select>
-                <span class="field-error" id="categoryError"></span>
+
+              <div class="field-group">
+                <label class="field-label" for="category">
+                  Category <abbr title="required" aria-hidden="true">*</abbr>
+                </label>
+                <div class="select-wrap">
+                  <select id="category" class="field-input field-select"
+                    required aria-required="true"
+                    aria-describedby="categoryError">
+                    <option value="">Select a category</option>
+                    <option value="Food &amp; Dining">Food &amp; Dining</option>
+                    <option value="Transport">Transport</option>
+                    <option value="Shopping">Shopping</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Health">Health</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Housing">Housing</option>
+                    <option value="Education">Education</option>
+                    <option value="Travel">Travel</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                    <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </div>
+                <span class="field-error" id="categoryError" role="alert" aria-live="polite"></span>
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="date">Date <span class="required">*</span></label>
-                <input type="date" id="date" required />
-                <span class="field-error" id="dateError"></span>
+
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-label" for="date">
+                  Date <abbr title="required" aria-hidden="true">*</abbr>
+                </label>
+                <input type="date" id="date" class="field-input"
+                  required aria-required="true"
+                  aria-describedby="dateError" />
+                <span class="field-error" id="dateError" role="alert" aria-live="polite"></span>
               </div>
-              <div class="form-group">
-                <label for="description">Description</label>
-                <input type="text" id="description" placeholder="Optional note…" />
+
+              <div class="field-group">
+                <label class="field-label" for="description">Description</label>
+                <input type="text" id="description" class="field-input"
+                  placeholder="Optional note" maxlength="120" />
               </div>
             </div>
+
             <div class="form-actions">
-              <button type="button" class="btn btn-ghost" id="resetFormBtn">Reset</button>
+              <button type="button" class="btn btn-ghost" id="resetFormBtn">Cancel</button>
               <button type="submit" class="btn btn-primary" id="submitBtn">
                 <span id="submitLabel">Add Expense</span>
               </button>
             </div>
-          </form>
-        </section>
 
-        <!-- Receipt Parser -->
-        <section class="card" id="receipt-parser">
-          <h2 class="card-title">🧾 Receipt Parser</h2>
-          <p class="card-desc">Paste raw receipt text below — the parser will auto-fill the form.</p>
+          </form>
+        </div>
+      </section>
+
+      <!-- ── Receipt Parser section ── -->
+      <section id="section-parser" class="page-section" aria-labelledby="heading-parser" tabindex="-1">
+        <h2 class="section-title" id="heading-parser">Receipt Parser</h2>
+        <p class="section-desc">Paste raw receipt text — the parser extracts vendor, amount, and date to pre-fill the form above.</p>
+
+        <div class="form-card">
+          <label class="field-label" for="receiptText">Receipt text</label>
           <textarea id="receiptText" class="receipt-textarea"
-            placeholder="e.g.&#10;WALMART SUPERCENTER&#10;Date: 09/15/2026&#10;Items: Groceries&#10;TOTAL: $47.93&#10;Thank you!"></textarea>
+            placeholder="WALMART SUPERCENTER&#10;Date: 09/15/2026&#10;Groceries  $12.50&#10;TOTAL: $47.93&#10;Thank you for shopping with us!"
+            aria-describedby="parseResult parseError"
+            rows="7"></textarea>
+
           <div class="receipt-actions">
-            <button class="btn btn-secondary" id="parseReceiptBtn">🔍 Parse Receipt</button>
+            <button class="btn btn-primary" id="parseReceiptBtn">Parse Receipt</button>
             <button class="btn btn-ghost" id="clearReceiptBtn">Clear</button>
           </div>
-          <div id="parseResult" class="parse-result hidden">
-            <h3 class="parse-result-title">Parsed Fields</h3>
-            <div class="parsed-fields" id="parsedFields"></div>
+
+          <div id="parseResult" class="parse-result hidden" aria-live="polite" role="status">
+            <p class="parse-result-title">Extracted fields</p>
+            <dl class="parsed-fields" id="parsedFields"></dl>
             <p class="parse-hint">Review the form above, then click <strong>Add Expense</strong>.</p>
           </div>
-          <div id="parseError" class="parse-error hidden"></div>
-        </section>
 
-      </div><!-- /two-col -->
+          <div id="parseError" class="parse-error hidden" role="alert" aria-live="assertive"></div>
+        </div>
+      </section>
 
-      <!-- ── Expense History ── -->
-      <section class="card" id="history">
+      <!-- ── History section ── -->
+      <section id="section-history" class="page-section" aria-labelledby="heading-history" tabindex="-1">
         <div class="history-header">
-          <h2 class="card-title">📋 Expense History</h2>
+          <h2 class="section-title" id="heading-history">Expense History</h2>
           <div class="history-controls">
-            <input type="text" id="searchInput" class="search-input" placeholder="🔎 Search expenses…" />
-            <select id="filterCategory" class="filter-select">
-              <option value="">All Categories</option>
-              <option value="Food & Dining">Food &amp; Dining</option>
-              <option value="Transport">Transport</option>
-              <option value="Shopping">Shopping</option>
-              <option value="Entertainment">Entertainment</option>
-              <option value="Health">Health</option>
-              <option value="Utilities">Utilities</option>
-              <option value="Housing">Housing</option>
-              <option value="Education">Education</option>
-              <option value="Travel">Travel</option>
-              <option value="Other">Other</option>
-            </select>
-            <select id="sortBy" class="filter-select">
-              <option value="date-desc">Newest First</option>
-              <option value="date-asc">Oldest First</option>
-              <option value="amount-desc">Highest Amount</option>
-              <option value="amount-asc">Lowest Amount</option>
-            </select>
+            <label class="sr-only" for="searchInput">Search expenses</label>
+            <div class="search-wrap">
+              <svg class="search-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+              <input type="search" id="searchInput" class="search-input"
+                placeholder="Search…" aria-label="Search expenses" />
+            </div>
+
+            <label class="sr-only" for="filterCategory">Filter by category</label>
+            <div class="select-wrap">
+              <select id="filterCategory" class="field-input field-select compact-select" aria-label="Filter by category">
+                <option value="">All categories</option>
+                <option value="Food &amp; Dining">Food &amp; Dining</option>
+                <option value="Transport">Transport</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Health">Health</option>
+                <option value="Utilities">Utilities</option>
+                <option value="Housing">Housing</option>
+                <option value="Education">Education</option>
+                <option value="Travel">Travel</option>
+                <option value="Other">Other</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+
+            <label class="sr-only" for="sortBy">Sort expenses</label>
+            <div class="select-wrap">
+              <select id="sortBy" class="field-input field-select compact-select" aria-label="Sort expenses">
+                <option value="date-desc">Newest first</option>
+                <option value="date-asc">Oldest first</option>
+                <option value="amount-desc">Highest amount</option>
+                <option value="amount-asc">Lowest amount</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
           </div>
         </div>
 
-        <div id="expenseTableWrapper">
-          <table class="expense-table" id="expenseTable">
+        <div id="expenseTableWrapper" class="table-wrapper">
+          <table class="expense-table" id="expenseTable" aria-label="Expense history">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Description</th>
-                <th>Category</th>
-                <th>Amount</th>
-                <th>Actions</th>
+                <th scope="col">Date</th>
+                <th scope="col">Description</th>
+                <th scope="col">Category</th>
+                <th scope="col" class="col-amount">Amount</th>
+                <th scope="col" class="col-actions">
+                  <span class="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody id="expenseTableBody"></tbody>
           </table>
-          <div class="empty-state hidden" id="emptyState">
-            <div class="empty-icon">📭</div>
-            <p>No expenses yet. Add your first one above!</p>
+
+          <div class="empty-state hidden" id="emptyState" aria-live="polite">
+            <svg class="empty-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <rect x="8" y="12" width="32" height="26" rx="3" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M8 20h32" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M16 8v8M32 8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M17 30h14M17 35h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".4"/>
+            </svg>
+            <p class="empty-title">No expenses yet</p>
+            <p class="empty-body">Add your first expense using the form above.</p>
           </div>
         </div>
       </section>
 
-    </main><!-- /main-content -->
-  </div><!-- /app-wrapper -->
+    </main>
+  </div>
 
-  <!-- Toast notification -->
-  <div class="toast" id="toast"></div>
+  <!-- ── Confirm modal ── -->
+  <div class="modal-backdrop hidden" id="modalBackdrop" aria-hidden="true">
+    <div class="modal" role="alertdialog" aria-modal="true"
+      aria-labelledby="modalTitle" aria-describedby="modalBody">
+      <h2 class="modal-title" id="modalTitle">Clear all expenses?</h2>
+      <p class="modal-body" id="modalBody"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modalCancelBtn">Cancel</button>
+        <button class="btn btn-danger" id="modalConfirmBtn">Clear all</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toast ── -->
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script src="app.js"></script>
 </body>
