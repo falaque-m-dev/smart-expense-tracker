@@ -1,10 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ExpenseIQ — Smart Expense Tracker</title>
   <link rel="stylesheet" href="styles.css" />
+  <!-- html2pdf.js 0.10.x — loaded eagerly so the bundle is cached before first export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+  <!-- Apply saved theme synchronously to prevent flash of wrong theme -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem('iq_theme');
+      var theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
 </head>
 <body>
 
@@ -78,10 +90,36 @@
               <span class="nav-label">History</span>
             </a>
           </li>
+          <li>
+            <a href="#section-export" class="nav-item" data-section="section-export">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M10 3v9M7 9l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span class="nav-label">Export</span>
+            </a>
+          </li>
         </ul>
       </nav>
 
       <div class="sidebar-footer">
+        <!-- Theme toggle -->
+        <button class="theme-toggle-btn" id="themeToggleBtn"
+          aria-label="Switch to light mode" title="Toggle theme">
+          <!-- Sun icon: shown in dark mode (click → switch to light) -->
+          <svg class="icon-sun nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"
+              stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <!-- Moon icon: shown in light mode (click → switch to dark) -->
+          <svg class="icon-moon nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M17 12A7 7 0 0 1 8 3a7 7 0 1 0 9 9z"
+              stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+          <span class="nav-label" id="themeToggleLabel">Light mode</span>
+        </button>
+
         <button class="sidebar-clear-btn" id="clearAllBtn" aria-label="Clear all expenses">
           <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" width="16" height="16">
             <path d="M5 6h10l-1 10H6L5 6z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
@@ -102,6 +140,24 @@
           <div>
             <h1 class="page-title" id="heading-dashboard">Dashboard</h1>
             <p class="page-subtitle">Track, parse, and manage your expenses</p>
+          </div>
+          <div class="page-header-actions">
+            <label class="sr-only" for="currencySelect">Display currency</label>
+            <div class="select-wrap currency-select-wrap">
+              <select id="currencySelect" class="field-input field-select compact-select" aria-label="Display currency">
+                <option value="USD">🇺🇸 USD ($)</option>
+                <option value="EUR">🇪🇺 EUR (€)</option>
+                <option value="GBP">🇬🇧 GBP (£)</option>
+                <option value="INR">🇮🇳 INR (₹)</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="currency-status" id="currencyStatus" aria-live="polite" role="status">
+              <span class="currency-status-indicator" id="currencyStatusIndicator" aria-hidden="true"></span>
+              <span class="currency-status-text" id="currencyStatusText">Live rates</span>
+            </div>
           </div>
         </header>
 
@@ -225,6 +281,26 @@
               </div>
 
               <div class="field-group">
+                <label class="field-label" for="paymentMethod">Payment Method</label>
+                <div class="select-wrap">
+                  <select id="paymentMethod" class="field-input field-select"
+                    aria-label="Payment method">
+                    <option value="">Select method</option>
+                    <option value="Cash">💵 Cash</option>
+                    <option value="UPI">📲 UPI</option>
+                    <option value="Card">💳 Card</option>
+                    <option value="Net Banking">🏦 Net Banking</option>
+                    <option value="Other">🔹 Other</option>
+                  </select>
+                  <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                    <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-group">
                 <label class="field-label" for="description">Description</label>
                 <input type="text" id="description" class="field-input"
                   placeholder="Optional note" maxlength="120" />
@@ -304,6 +380,21 @@
               </svg>
             </div>
 
+            <label class="sr-only" for="filterPayment">Filter by payment method</label>
+            <div class="select-wrap">
+              <select id="filterPayment" class="field-input field-select compact-select" aria-label="Filter by payment method">
+                <option value="">All methods</option>
+                <option value="Cash">💵 Cash</option>
+                <option value="UPI">📲 UPI</option>
+                <option value="Card">💳 Card</option>
+                <option value="Net Banking">🏦 Net Banking</option>
+                <option value="Other">🔹 Other</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+
             <label class="sr-only" for="sortBy">Sort expenses</label>
             <div class="select-wrap">
               <select id="sortBy" class="field-input field-select compact-select" aria-label="Sort expenses">
@@ -326,6 +417,7 @@
                 <th scope="col">Date</th>
                 <th scope="col">Description</th>
                 <th scope="col">Category</th>
+                <th scope="col">Payment</th>
                 <th scope="col" class="col-amount">Amount</th>
                 <th scope="col" class="col-actions">
                   <span class="sr-only">Actions</span>
@@ -348,8 +440,111 @@
         </div>
       </section>
 
+      <!-- ── Export & Backup section ── -->
+      <section id="section-export" class="page-section" aria-labelledby="heading-export" tabindex="-1">
+        <h2 class="section-title" id="heading-export">Export &amp; Backup</h2>
+        <p class="section-desc">Download your expense data in multiple formats or create a full backup you can restore later.</p>
+
+        <div class="export-grid">
+
+          <!-- Export CSV -->
+          <div class="export-card">
+            <div class="export-card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="M8 13h2.5M8 17h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="export-card-body">
+              <p class="export-card-title">Export CSV</p>
+              <p class="export-card-desc">Spreadsheet-ready file with all filtered expenses. Opens in Excel, Sheets, or any CSV editor.</p>
+            </div>
+            <button class="btn btn-primary" id="exportCsvBtn" aria-label="Export expenses as CSV">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="14" height="14">
+                <path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Export CSV
+            </button>
+          </div>
+
+          <!-- Export PDF -->
+          <div class="export-card">
+            <div class="export-card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="M9 13h1.5a1 1 0 0 1 0 2H9v-2zm0 2v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="export-card-body">
+              <p class="export-card-title">Export PDF</p>
+              <p class="export-card-desc">Formatted PDF report with budget summary and full expense table, ready to print or share.</p>
+            </div>
+            <button class="btn btn-primary" id="exportPdfBtn" aria-label="Export expenses as PDF">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="14" height="14">
+                <path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Export PDF
+            </button>
+          </div>
+
+          <!-- Backup JSON -->
+          <div class="export-card">
+            <div class="export-card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <ellipse cx="12" cy="5" rx="9" ry="3" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6" stroke="currentColor" stroke-width="1.6"/>
+              </svg>
+            </div>
+            <div class="export-card-body">
+              <p class="export-card-title">Backup JSON</p>
+              <p class="export-card-desc">Full data backup including all expenses and metadata. Use this to migrate or restore your data.</p>
+            </div>
+            <button class="btn btn-primary" id="backupJsonBtn" aria-label="Download JSON backup">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="14" height="14">
+                <path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Backup JSON
+            </button>
+          </div>
+
+          <!-- Restore JSON -->
+          <div class="export-card">
+            <div class="export-card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M3 12a9 9 0 1 1 9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <path d="M3 7v5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="export-card-body">
+              <p class="export-card-title">Restore JSON</p>
+              <p class="export-card-desc">Restore a previously exported JSON backup. Your current data will be replaced.</p>
+            </div>
+            <button class="btn btn-ghost" id="restoreJsonBtn" aria-label="Restore from JSON backup">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="14" height="14">
+                <path d="M8 12V4M5 7l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Restore JSON
+            </button>
+            <!-- Hidden file input — triggered programmatically -->
+            <input type="file" id="restoreJsonInput" accept=".json,application/json"
+              class="sr-only" aria-label="Select JSON backup file" />
+          </div>
+
+        </div>
+      </section>
+
     </main>
   </div>
+
+  <!-- ── PDF export target (visually hidden, never in the visible DOM flow) ── -->
+  <div id="pdf-export-target" aria-hidden="true" style="position:absolute;left:-9999px;top:0;width:794px;"></div>
 
   <!-- ── Confirm modal ── -->
   <div class="modal-backdrop hidden" id="modalBackdrop" aria-hidden="true">
