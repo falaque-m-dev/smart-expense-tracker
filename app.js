@@ -32,34 +32,36 @@
 const LS_EXPENSES = 'iq_expenses_v2';
 const LS_BUDGET   = 'iq_budget_v2';
 const LS_THEME    = 'iq_theme';       /* 'light' | 'dark' */
-const LS_CURRENCY = 'iq_currency';    /* 'USD' | 'EUR' | 'GBP' | 'INR' */
+const LS_CURRENCY = 'iq_currency';    /* Default currency for new expenses */
 
 /** @type {Expense[]} */
 let expenses  = [];
 let budget    = 0;
 let editingId = null;   // null = "add" mode; string = "edit" mode
-let currentCurrency = 'USD';
-let exchangeRates   = { USD: 1 }; // Base rates with USD = 1
-let ratesFetchTime  = 0;          // Last successful fetch timestamp
+let currentCurrency = 'USD';   // Default display currency (kept for backward compatibility)
+let preferredExpenseCurrency = 'INR';  // User's preferred currency for new expenses
 
 /**
  * @typedef {{ id:string, amount:number, category:string,
  *             date:string, description:string,
- *             paymentMethod:string, createdAt:number }} Expense
+ *             paymentMethod:string, createdAt:number,
+ *             currency:string, currencySymbol:string }} Expense
  */
 
 /** Canonical payment method options — single source of truth */
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Net Banking', 'Other'];
 
-/** Currency symbols */
-const CURRENCY_SYMBOLS = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  INR: '₹',
+/** Currency information map */
+const CURRENCIES = {
+  INR: { symbol: '₹', name: 'Indian Rupee' },
+  USD: { symbol: '$', name: 'US Dollar' },
+  EUR: { symbol: '€', name: 'Euro' },
+  SEK: { symbol: 'kr', name: 'Swedish Krona' },
+  KWD: { symbol: 'KD', name: 'Kuwaiti Dinar' },
+  SAR: { symbol: 'SR', name: 'Saudi Riyal' },
 };
 
-/** Offline fallback rates (approximate, for when API is unreachable) */
+/** Offline fallback rates (kept for backward compatibility) */
 const FALLBACK_RATES = {
   USD: 1,
   EUR: 0.85,
@@ -95,14 +97,15 @@ const editBudgetBtn   = get('editBudgetBtn');
 const budgetInput     = get('budgetInput');
 
 // ── Expense form ──
-const expenseForm       = get('expenseForm');
-const amountInput       = get('amount');
-const categoryInput     = get('category');
-const paymentMethodInput= get('paymentMethod');
-const dateInput         = get('date');
-const descInput         = get('description');
-const submitLabel       = get('submitLabel');
-const resetFormBtn      = get('resetFormBtn');
+const expenseForm         = get('expenseForm');
+const expenseCurrencySelect = get('expenseCurrencySelect');
+const amountInput         = get('amount');
+const categoryInput       = get('category');
+const paymentMethodInput  = get('paymentMethod');
+const dateInput           = get('date');
+const descInput           = get('description');
+const submitLabel         = get('submitLabel');
+const resetFormBtn        = get('resetFormBtn');
 
 // ── Field errors ──
 const amountError     = get('amountError');
@@ -140,13 +143,14 @@ const backupJsonBtn   = get('backupJsonBtn');
 const restoreJsonBtn  = get('restoreJsonBtn');
 const restoreJsonInput= get('restoreJsonInput');
 
-// ── Currency ──
-const currencySelect     = get('currencySelect');
-const currencyStatus     = get('currencyStatus');
-const currencyStatusIndicator = get('currencyStatusIndicator');
-const currencyStatusText = get('currencyStatusText');
-const modalCancelBtn  = get('modalCancelBtn');
-const modalConfirmBtn = get('modalConfirmBtn');
+// ── Charts (Task 6) ──
+const categoryChartCanvas = get('categoryChart');
+const trendChartCanvas    = get('trendChart');
+const categoryChartEmpty  = get('categoryChartEmpty');
+const trendChartEmpty     = get('trendChartEmpty');
+
+let categoryChartInstance = null;
+let trendChartInstance    = null;
 
 // ── Toast ──
 const toastEl = get('toast');
@@ -176,6 +180,12 @@ function loadFromStorage() {
   } catch {
     currentCurrency = 'USD';
   }
+  try {
+    const pc = localStorage.getItem('iq_expense_currency');
+    preferredExpenseCurrency = (pc && CURRENCIES[pc]) ? pc : 'INR';
+  } catch {
+    preferredExpenseCurrency = 'INR';
+  }
 }
 
 function saveExpenses() {
@@ -203,17 +213,30 @@ function uid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Format number as currency using the current display currency */
-function fmt$(n) {
-  const convertedAmount = convertCurrency(n, 'USD', currentCurrency);
-  const symbol = CURRENCY_SYMBOLS[currentCurrency] || currentCurrency;
+/** Format number as currency using the expense's saved currency symbol */
+function fmt$(amount, currency = 'USD', symbol = '$') {
+  const currencyInfo = CURRENCIES[currency] || { symbol: '$' };
+  const displaySymbol = currencyInfo.symbol;
   
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', 
-    currency: currentCurrency,
-    minimumFractionDigits: currentCurrency === 'INR' ? 0 : 2,
-    maximumFractionDigits: currentCurrency === 'INR' ? 0 : 2,
-  }).format(convertedAmount);
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: currency === 'INR' ? 0 : 2,
+    maximumFractionDigits: currency === 'INR' ? 0 : 2,
+  }).format(amount);
+}
+
+/** Format amount with symbol only (no currency code) */
+function fmtWithSymbol(amount, currency = 'USD') {
+  const currencyInfo = CURRENCIES[currency] || { symbol: '$' };
+  const symbol = currencyInfo.symbol;
+  
+  // For currencies with symbol on right
+  if (['SEK', 'KWD', 'SAR'].includes(currency)) {
+    return `${amount.toFixed(2)} ${symbol}`;
+  }
+  // For currencies with symbol on left
+  return `${symbol}${amount.toFixed(currency === 'INR' ? 0 : 2)}`;
 }
 
 /** ISO date string → "Sep 24, 2026" */
@@ -242,107 +265,6 @@ function esc(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-/** Convert amount from one currency to another using current exchange rates */
-function convertCurrency(amount, fromCurrency, toCurrency) {
-  if (fromCurrency === toCurrency) return amount;
-  
-  // Convert from -> USD -> to
-  const usdAmount = fromCurrency === 'USD' ? amount : amount / (exchangeRates[fromCurrency] || 1);
-  const convertedAmount = toCurrency === 'USD' ? usdAmount : usdAmount * (exchangeRates[toCurrency] || 1);
-  
-  return convertedAmount;
-}
-
-/** Get today's date as YYYY-MM-DD for cache keys */
-function getCacheDate() {
-  return todayISO();
-}
-
-/** Check if exchange rates need refreshing (older than 1 hour) */
-function shouldRefreshRates() {
-  return Date.now() - ratesFetchTime > 60 * 60 * 1000; // 1 hour
-}
-
-/** Fetch exchange rates from Frankfurter API */
-async function fetchExchangeRates() {
-  const cacheKey = `fx_rates_${getCacheDate()}`;
-  
-  // Try cached rates first
-  try {
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached && !shouldRefreshRates()) {
-      const parsed = JSON.parse(cached);
-      exchangeRates = parsed.rates;
-      ratesFetchTime = parsed.timestamp;
-      updateCurrencyStatus('live');
-      return true;
-    }
-  } catch {
-    // Cache miss or parse error, continue to API
-  }
-  
-  try {
-    const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,INR');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    
-    const data = await response.json();
-    exchangeRates = { USD: 1, ...data.rates };
-    ratesFetchTime = Date.now();
-    
-    // Cache the result
-    const cacheData = {
-      rates: exchangeRates,
-      timestamp: ratesFetchTime,
-    };
-    sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    
-    updateCurrencyStatus('live');
-    return true;
-  } catch (error) {
-    console.warn('Exchange rate fetch failed:', error.message);
-    
-    // Fall back to cached rates (any date)
-    const cachedKeys = Object.keys(sessionStorage).filter(key => key.startsWith('fx_rates_'));
-    if (cachedKeys.length > 0) {
-      try {
-        const latestCache = cachedKeys.sort().pop();
-        const cached = JSON.parse(sessionStorage.getItem(latestCache));
-        exchangeRates = cached.rates;
-        ratesFetchTime = cached.timestamp;
-        updateCurrencyStatus('cached');
-        return true;
-      } catch {
-        // Cache parse failed, use fallback
-      }
-    }
-    
-    // Use offline fallback rates
-    exchangeRates = { ...FALLBACK_RATES };
-    ratesFetchTime = 0;
-    updateCurrencyStatus('offline');
-    return false;
-  }
-}
-
-/** Update currency status indicator */
-function updateCurrencyStatus(status) {
-  currencyStatus.className = 'currency-status';
-  
-  switch (status) {
-    case 'live':
-      currencyStatusText.textContent = 'Live rates';
-      break;
-    case 'cached':
-      currencyStatus.classList.add('warning');
-      currencyStatusText.textContent = 'Cached rates';
-      break;
-    case 'offline':
-      currencyStatus.classList.add('error');
-      currencyStatusText.textContent = 'Offline rates';
-      break;
-  }
 }
 
 /* ══════════════════════════════════════════
@@ -495,6 +417,7 @@ function initScrollSpy() {
     'section-parser',
     'section-history',
     'section-export',
+    'section-analytics',
   ];
 
   const navItems = document.querySelectorAll('.nav-item[data-section]');
@@ -675,6 +598,9 @@ function initExpenseForm() {
     e.preventDefault();
     if (!validateForm()) return;
 
+    const selectedCurrency = expenseCurrencySelect.value;
+    const currencyInfo = CURRENCIES[selectedCurrency] || { symbol: '$' };
+
     const entry = {
       id:            editingId ?? uid(),
       amount:        Math.round(parseFloat(amountInput.value) * 100) / 100,
@@ -685,6 +611,8 @@ function initExpenseForm() {
       createdAt:     editingId
                        ? (expenses.find(x => x.id === editingId)?.createdAt ?? Date.now())
                        : Date.now(),
+      currency:      selectedCurrency,
+      currencySymbol: currencyInfo.symbol,
     };
 
     if (editingId) {
@@ -693,8 +621,11 @@ function initExpenseForm() {
       showToast('Expense updated.', 'success');
     } else {
       expenses.unshift(entry);
-      showToast(`${fmt$(entry.amount)} added — ${entry.category}`, 'success');
+      showToast(`${fmt$(entry.amount, entry.currency, entry.currencySymbol)} added — ${entry.category}`, 'success');
     }
+
+    // Save preferred currency for future entries
+    localStorage.setItem('iq_expense_currency', selectedCurrency);
 
     editingId = null;
     submitLabel.textContent = 'Add Expense';
@@ -702,6 +633,7 @@ function initExpenseForm() {
     saveExpenses();
     calcTotals();
     renderTable();
+    renderCharts();
     resetForm();
   });
 
@@ -722,6 +654,7 @@ function resetForm() {
   paymentMethodInput.value   = '';
   dateInput.value            = todayISO();
   descInput.value            = '';
+  expenseCurrencySelect.value = preferredExpenseCurrency;
   clearValidation();
 }
 
@@ -878,7 +811,7 @@ function runParser() {
   // Show summary using <dl> structure
   const rows = [
     { label: 'Vendor', value: parsed.vendor  ?? 'Not detected' },
-    { label: 'Amount', value: parsed.amount !== null ? fmt$(parsed.amount) : 'Not detected' },
+    { label: 'Amount', value: parsed.amount !== null ? fmtWithSymbol(parsed.amount, expenseCurrencySelect.value) : 'Not detected' },
     { label: 'Date',   value: parsed.date    ? fmtDate(parsed.date) : 'Not detected' },
   ];
 
@@ -980,6 +913,7 @@ function renderTable() {
     const isNew    = i === 0 && editingId === null;
     const pm       = e.paymentMethod || 'Other';
     const pmIcon   = PM_ICON[pm] ?? PM_ICON['Other'];
+    const currencySymbol = e.currencySymbol || CURRENCIES[e.currency]?.symbol || '$';
     return `
       <tr class="${isNew ? 'new-row' : ''}" data-id="${esc(e.id)}">
         <td class="td-date">${esc(fmtDate(e.date))}</td>
@@ -996,23 +930,209 @@ function renderTable() {
             <span class="pm-label">${esc(pm)}</span>
           </span>
         </td>
-        <td class="td-amount">${esc(fmt$(e.amount))}</td>
+        <td class="td-amount">${currencySymbol}${esc(e.amount.toFixed(e.currency === 'INR' ? 0 : 2))}</td>
         <td class="td-actions">
           <div class="row-actions">
             <button class="btn-row btn-row-edit"
               data-id="${esc(e.id)}"
-              aria-label="Edit ${esc(e.category)} expense of ${esc(fmt$(e.amount))}">
+              aria-label="Edit ${esc(e.category)} expense of ${esc(fmtWithSymbol(e.amount, e.currency))}">
               Edit
             </button>
             <button class="btn-row btn-row-delete"
               data-id="${esc(e.id)}"
-              aria-label="Delete ${esc(e.category)} expense of ${esc(fmt$(e.amount))}">
+              aria-label="Delete ${esc(e.category)} expense of ${esc(fmtWithSymbol(e.amount, e.currency))}">
               Delete
             </button>
           </div>
         </td>
       </tr>`;
   }).join('');
+}
+
+/* ══════════════════════════════════════════
+   15A. VISUAL ANALYTICS (Task 6)
+══════════════════════════════════════════ */
+
+/** Get a CSS variable value as hex color (with fallback) */
+function getThemeColor(token) {
+  const computed = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+  return computed || '#0d9488'; // fallback to teal
+}
+
+/** Destroy a chart instance safely */
+function destroyChart(instance) {
+  if (instance) {
+    instance.destroy();
+    return null;
+  }
+  return instance;
+}
+
+/** Render both charts based on current expense data */
+function renderCharts() {
+  const list = getFiltered();
+  
+  // Destroy existing instances before creating new ones
+  categoryChartInstance = destroyChart(categoryChartInstance);
+  trendChartInstance    = destroyChart(trendChartInstance);
+  
+  // Show/hide empty states
+  categoryChartEmpty.classList.toggle('show', list.length === 0);
+  trendChartEmpty.classList.toggle('show', list.length === 0);
+  
+  if (list.length === 0) {
+    return; // Nothing to chart
+  }
+  
+  // ── Category Doughnut Chart ──
+  const categoryTotals = {};
+  list.forEach(e => {
+    const cat = e.category || 'Other';
+    categoryTotals[cat] = (categoryTotals[cat] || 0) + e.amount;
+  });
+  
+  const categoryLabels = Object.keys(categoryTotals);
+  const categoryData   = Object.values(categoryTotals);
+  
+  // Use theme colors for the doughnut chart
+  const categoryColors = [
+    '#0d9488', '#6366f1', '#d97706', '#dc2626', '#059669',
+    '#8b5cf6', '#ec4899', '#0891b2', '#84cc16', '#f97316'
+  ];
+  
+  const categoryCtx = categoryChartCanvas.getContext('2d');
+  categoryChartInstance = new Chart(categoryCtx, {
+    type: 'doughnut',
+    data: {
+      labels: categoryLabels,
+      datasets: [{
+        data: categoryData,
+        backgroundColor: categoryColors.slice(0, categoryLabels.length),
+        borderWidth: 0,
+        hoverOffset: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            padding: 16,
+            usePointStyle: true,
+            font: { size: 12 },
+            color: getThemeColor('--text-secondary'),
+          },
+        },
+        tooltip: {
+          backgroundColor: getThemeColor('--surface-raised'),
+          titleColor: getThemeColor('--text-primary'),
+          bodyColor: getThemeColor('--text-secondary'),
+          borderColor: getThemeColor('--border-default'),
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: ctx => {
+              const value = ctx.parsed;
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct   = ((value / total) * 100).toFixed(1);
+              return ` ${fmt$(value)} (${pct}%)`;
+            },
+          },
+        },
+      },
+      animation: {
+        duration: 400,
+        easing: 'easeOutQuart',
+      },
+    },
+  });
+  
+  // ── Spending Trend Bar Chart (current month daily) ──
+  // Group expenses by day for current month
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+  
+  const dailyTotals = {};
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    dailyTotals[dateKey] = 0;
+  }
+  
+  list.forEach(e => {
+    if (dailyTotals.hasOwnProperty(e.date)) {
+      dailyTotals[e.date] += e.amount;
+    }
+  });
+  
+  const trendLabels = Object.keys(dailyTotals).map(date => {
+    const [y, m, d] = date.split('-');
+    return new Date(y, m - 1, d).getDate(); // Just show day number
+  });
+  const trendData = Object.values(dailyTotals);
+  
+  const trendCtx = trendChartCanvas.getContext('2d');
+  trendChartInstance = new Chart(trendCtx, {
+    type: 'bar',
+    data: {
+      labels: trendLabels,
+      datasets: [{
+        label: 'Daily Spending',
+        data: trendData,
+        backgroundColor: getThemeColor('--accent'),
+        borderRadius: 4,
+        barThickness: 'flex',
+        maxBarThickness: 24,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            font: { size: 10 },
+            color: getThemeColor('--text-muted'),
+            maxTicksLimit: 10,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: getThemeColor('--border-subtle'),
+          },
+          ticks: {
+            font: { size: 11 },
+            color: getThemeColor('--text-secondary'),
+            callback: value => fmt$(value).replace('.00', ''),
+          },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: getThemeColor('--surface-raised'),
+          titleColor: getThemeColor('--text-primary'),
+          bodyColor: getThemeColor('--text-secondary'),
+          borderColor: getThemeColor('--border-default'),
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: ctx => ` ${fmt$(ctx.parsed.y)}`,
+          },
+        },
+      },
+      animation: {
+        duration: 400,
+        easing: 'easeOutQuart',
+      },
+    },
+  });
 }
 
 /* ══════════════════════════════════════════
@@ -1034,6 +1154,10 @@ function startEdit(id) {
   if (!ex) return;
 
   editingId = id;
+  
+  // Set currency selector to match the expense's currency
+  expenseCurrencySelect.value = ex.currency || 'INR';
+  
   amountInput.value          = ex.amount.toFixed(2);
   categoryInput.value        = ex.category;
   paymentMethodInput.value   = ex.paymentMethod || '';
@@ -1053,8 +1177,10 @@ async function deleteExpense(id) {
   const ex = expenses.find(e => e.id === id);
   if (!ex) return;
 
+  const currencySymbol = ex.currencySymbol || CURRENCIES[ex.currency]?.symbol || '$';
+
   const confirmed = await showModal(
-    `Delete the ${ex.category} expense of ${fmt$(ex.amount)} on ${fmtDate(ex.date)}? This cannot be undone.`
+    `Delete the ${ex.category} expense of ${currencySymbol}${ex.amount.toFixed(ex.currency === 'INR' ? 0 : 2)} on ${fmtDate(ex.date)}? This cannot be undone.`
   );
   if (!confirmed) return;
 
@@ -1066,7 +1192,8 @@ async function deleteExpense(id) {
   saveExpenses();
   calcTotals();
   renderTable();
-  showToast(`Deleted ${fmt$(ex.amount)} — ${ex.category}`, 'warn');
+  renderCharts();
+  showToast(`Deleted ${ex.currencySymbol || CURRENCIES[ex.currency]?.symbol || '$'}${ex.amount.toFixed(ex.currency === 'INR' ? 0 : 2)} — ${ex.category}`, 'warn');
 }
 
 /* ══════════════════════════════════════════
@@ -1101,32 +1228,25 @@ function initClearAll() {
     saveExpenses();
     calcTotals();
     renderTable();
+    renderCharts();   // Task 6
     showToast('All expenses cleared.', 'warn');
   });
 }
 
 /* ══════════════════════════════════════════
    16. CURRENCY SYSTEM  (Task 5)
+   Now uses per-expense currency storage.
 ══════════════════════════════════════════ */
 
 async function initCurrency() {
-  // Set initial currency from localStorage
-  currencySelect.value = currentCurrency;
+  // Set initial expense currency selector value from localStorage
+  expenseCurrencySelect.value = preferredExpenseCurrency;
   
-  // Fetch exchange rates
-  await fetchExchangeRates();
-  
-  // Wire currency selector
-  currencySelect.addEventListener('change', async () => {
-    currentCurrency = currencySelect.value;
-    saveCurrency();
-    
-    // Re-render all amounts with new currency
-    calcTotals();
-    renderTable();
-    
-    showToast(`Switched to ${currentCurrency}`, 'success', 2000);
-  });
+  // Remove old dashboard currency selector from DOM since it's no longer needed
+  const dashboardCurrencySelect = document.getElementById('currencySelect');
+  const dashboardCurrencyStatus = document.getElementById('currencyStatus');
+  if (dashboardCurrencySelect) dashboardCurrencySelect.parentElement.remove();
+  if (dashboardCurrencyStatus) dashboardCurrencyStatus.remove();
 }
 
 /* ══════════════════════════════════════════
@@ -1162,15 +1282,16 @@ function exportToCSV() {
     return;
   }
 
-  const header = ['Date', 'Description', 'Category', 'Payment Method', 'Amount', 'Currency'];
+  const header = ['Date', 'Description', 'Category', 'Payment Method', 'Amount', 'Currency', 'Currency Symbol'];
 
   const rows = list.map(e => [
     e.date,
     e.description || '',
     e.category,
     e.paymentMethod || 'Other',
-    e.amount.toFixed(2),
-    'USD',
+    e.amount.toFixed(e.currency === 'INR' ? 0 : 2),
+    e.currency || 'INR',
+    e.currencySymbol || CURRENCIES[e.currency]?.symbol || '₹',
   ]);
 
   // RFC 4180 — quote fields containing commas, quotes, or newlines
@@ -1264,7 +1385,7 @@ async function exportToPDF() {
               <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#0f172a;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(e.description || '—')}</td>
               <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${esc(e.category)}</td>
               <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${esc(e.paymentMethod || 'Other')}</td>
-              <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:500;color:#0f172a;">${esc(fmt$(e.amount))}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:500;color:#0f172a;">${e.currencySymbol || CURRENCIES[e.currency]?.symbol || '$'}${esc(e.amount.toFixed(e.currency === 'INR' ? 0 : 2))}</td>
             </tr>`).join('')}
         </tbody>
         <tfoot>
@@ -1381,7 +1502,44 @@ function initExport() {
 }
 
 /* ══════════════════════════════════════════
-   18. BOOTSTRAP
+   18. PRELOADER SPLASH SCREEN
+   Fades out after minimum display time.
+══════════════════════════════════════════ */
+
+function initPreloader() {
+  const preloader = document.getElementById('preloader');
+  if (!preloader) return;
+
+  // Minimum display time before fade-out (1.2 seconds)
+  const MIN_DISPLAY_TIME = 1200;
+  const startTime = performance.now();
+
+  // Function to fade out the preloader
+  const fadeOutPreloader = () => {
+    const elapsed = performance.now() - startTime;
+    const remainingTime = Math.max(0, MIN_DISPLAY_TIME - elapsed);
+
+    // Wait for minimum display time, then fade out
+    setTimeout(() => {
+      preloader.classList.add('fade-out');
+      
+      // Remove from DOM after transition completes (600ms)
+      setTimeout(() => {
+        preloader.remove();
+      }, 600);
+    }, remainingTime);
+  };
+
+  // Start fade-out when DOM is ready
+  if (document.readyState === 'complete') {
+    fadeOutPreloader();
+  } else {
+    window.addEventListener('load', fadeOutPreloader);
+  }
+}
+
+/* ══════════════════════════════════════════
+   19. BOOTSTRAP
 ══════════════════════════════════════════ */
 
 function init() {
@@ -1401,10 +1559,15 @@ function init() {
   initHistoryControls();
   initClearAll();
   initExport();     // Task 4
+  initCurrency();   // Task 5
 
   // Initial render
   calcTotals();
   renderTable();
+  renderCharts();   // Task 6
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Initialize preloader as early as possible
+initPreloader();

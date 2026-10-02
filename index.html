@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="styles.css" />
   <!-- html2pdf.js 0.10.x — loaded eagerly so the bundle is cached before first export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+  <!-- Chart.js 4.x -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Apply saved theme synchronously to prevent flash of wrong theme -->
   <script>
     (function () {
@@ -19,6 +21,22 @@
   </script>
 </head>
 <body>
+
+  <!-- ── Preloader Splash Screen ── -->
+  <div id="preloader" class="preloader" role="status" aria-label="Loading ExpenseIQ">
+    <div class="preloader-content">
+      <div class="preloader-logo">
+        <svg class="preloader-logo-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M2 10h20" stroke="currentColor" stroke-width="1.6"/>
+          <circle cx="7" cy="15" r="1.2" fill="currentColor"/>
+        </svg>
+        <span class="preloader-brand-name">ExpenseIQ</span>
+      </div>
+      <div class="preloader-spinner" aria-hidden="true"></div>
+      <p class="preloader-tagline">Initializing ExpenseIQ...</p>
+    </div>
+  </div>
 
   <!-- ── Mobile top bar ── -->
   <div class="mobile-topbar" aria-hidden="true">
@@ -99,6 +117,14 @@
               <span class="nav-label">Export</span>
             </a>
           </li>
+          <li>
+            <a href="#section-analytics" class="nav-item" data-section="section-analytics">
+              <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M3 3v14M7 10h4M5 14h6M11 7h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="nav-label">Analytics</span>
+            </a>
+          </li>
         </ul>
       </nav>
 
@@ -140,24 +166,6 @@
           <div>
             <h1 class="page-title" id="heading-dashboard">Dashboard</h1>
             <p class="page-subtitle">Track, parse, and manage your expenses</p>
-          </div>
-          <div class="page-header-actions">
-            <label class="sr-only" for="currencySelect">Display currency</label>
-            <div class="select-wrap currency-select-wrap">
-              <select id="currencySelect" class="field-input field-select compact-select" aria-label="Display currency">
-                <option value="USD">🇺🇸 USD ($)</option>
-                <option value="EUR">🇪🇺 EUR (€)</option>
-                <option value="GBP">🇬🇧 GBP (£)</option>
-                <option value="INR">🇮🇳 INR (₹)</option>
-              </select>
-              <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
-                <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </div>
-            <div class="currency-status" id="currencyStatus" aria-live="polite" role="status">
-              <span class="currency-status-indicator" id="currencyStatusIndicator" aria-hidden="true"></span>
-              <span class="currency-status-text" id="currencyStatusText">Live rates</span>
-            </div>
           </div>
         </header>
 
@@ -228,12 +236,25 @@
 
             <div class="field-row">
               <div class="field-group">
-                <label class="field-label" for="amount">
+                <label class="field-label" for="expenseCurrencySelect">
                   Amount <abbr title="required" aria-hidden="true">*</abbr>
                 </label>
-                <div class="input-prefix-wrap">
-                  <span class="input-prefix" aria-hidden="true">$</span>
-                  <input type="number" id="amount" class="field-input input-prefixed"
+                <div class="currency-input-group">
+                  <div class="currency-select-wrap">
+                    <select id="expenseCurrencySelect" class="field-input field-select currency-select"
+                      aria-label="Currency">
+                      <option value="INR">₹ INR</option>
+                      <option value="USD">$ USD</option>
+                      <option value="EUR">€ EUR</option>
+                      <option value="SEK">kr SEK</option>
+                      <option value="KWD">KD KWD</option>
+                      <option value="SAR">SR SAR</option>
+                    </select>
+                    <svg class="select-chevron" viewBox="0 0 12 8" fill="none" aria-hidden="true">
+                      <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                  </div>
+                  <input type="number" id="amount" class="field-input amount-input"
                     placeholder="0.00" min="0.01" step="0.01"
                     required aria-required="true"
                     aria-describedby="amountError" />
@@ -540,6 +561,30 @@
         </div>
       </section>
 
+    <!-- ── Visual Analytics section ── -->
+      <section id="section-analytics" class="page-section" aria-labelledby="heading-analytics" tabindex="-1">
+        <h2 class="section-title" id="heading-analytics">Visual Analytics</h2>
+        <p class="section-desc">Your spending patterns at a glance.</p>
+
+        <div class="analytics-grid">
+          <div class="analytics-card">
+            <h3 class="analytics-card-title">Spending by Category</h3>
+            <div class="chart-container">
+              <canvas id="categoryChart"></canvas>
+            </div>
+            <p class="analytics-empty" id="categoryChartEmpty">Add expenses to see category breakdown</p>
+          </div>
+
+          <div class="analytics-card">
+            <h3 class="analytics-card-title">Spending Over Time</h3>
+            <div class="chart-container">
+              <canvas id="trendChart"></canvas>
+            </div>
+            <p class="analytics-empty" id="trendChartEmpty">Add expenses to see spending trends</p>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -562,6 +607,9 @@
   <!-- ── Toast ── -->
   <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
+
+
+  
   <script src="app.js"></script>
 </body>
 </html>
