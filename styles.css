@@ -1164,15 +1164,15 @@ body {
   border-color: var(--accent);
   box-shadow: 
     0 0 0 3px var(--accent-dim),
-    0 0 20px rgba(13, 148, 136, 0.15),
+    0 0 20px var(--accent-glow),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .field-input:focus-visible {
   box-shadow: 
     0 0 0 3px var(--accent-dim),
-    0 0 20px rgba(13, 148, 136, 0.25),
-    0 0 40px rgba(13, 148, 136, 0.1),
+    0 0 20px var(--accent-glow),
+    0 0 40px var(--accent-dim),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 

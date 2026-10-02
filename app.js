@@ -32,14 +32,13 @@
 const LS_EXPENSES = 'iq_expenses_v2';
 const LS_BUDGET   = 'iq_budget_v2';
 const LS_THEME    = 'iq_theme';       /* 'light' | 'dark' */
-const LS_CURRENCY = 'iq_currency';    /* Default currency for new expenses */
+const LS_CURRENCY = 'iq_active_currency';    /* Global display currency */
 
 /** @type {Expense[]} */
 let expenses  = [];
 let budget    = 0;
 let editingId = null;   // null = "add" mode; string = "edit" mode
-let currentCurrency = 'USD';   // Default display currency (kept for backward compatibility)
-let preferredExpenseCurrency = 'INR';  // User's preferred currency for new expenses
+let activeCurrency = 'INR';  // Global display currency
 
 /**
  * @typedef {{ id:string, amount:number, category:string,
@@ -53,20 +52,12 @@ const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Net Banking', 'Other'];
 
 /** Currency information map */
 const CURRENCIES = {
-  INR: { symbol: '₹', name: 'Indian Rupee' },
-  USD: { symbol: '$', name: 'US Dollar' },
-  EUR: { symbol: '€', name: 'Euro' },
-  SEK: { symbol: 'kr', name: 'Swedish Krona' },
-  KWD: { symbol: 'KD', name: 'Kuwaiti Dinar' },
-  SAR: { symbol: 'SR', name: 'Saudi Riyal' },
-};
-
-/** Offline fallback rates (kept for backward compatibility) */
-const FALLBACK_RATES = {
-  USD: 1,
-  EUR: 0.85,
-  GBP: 0.73,
-  INR: 83.15,
+  INR: { symbol: '₹', name: 'Indian Rupee', position: 'left' },
+  USD: { symbol: '$', name: 'US Dollar', position: 'left' },
+  EUR: { symbol: '€', name: 'Euro', position: 'left' },
+  SEK: { symbol: 'kr', name: 'Swedish Krona', position: 'right' },
+  KWD: { symbol: 'KD', name: 'Kuwaiti Dinar', position: 'right' },
+  SAR: { symbol: 'SR', name: 'Saudi Riyal', position: 'right' },
 };
 
 /* ══════════════════════════════════════════
@@ -176,15 +167,9 @@ function loadFromStorage() {
   }
   try {
     const c = localStorage.getItem(LS_CURRENCY);
-    currentCurrency = (c === 'USD' || c === 'EUR' || c === 'GBP' || c === 'INR') ? c : 'USD';
+    activeCurrency = (c && CURRENCIES[c]) ? c : 'INR';
   } catch {
-    currentCurrency = 'USD';
-  }
-  try {
-    const pc = localStorage.getItem('iq_expense_currency');
-    preferredExpenseCurrency = (pc && CURRENCIES[pc]) ? pc : 'INR';
-  } catch {
-    preferredExpenseCurrency = 'INR';
+    activeCurrency = 'INR';
   }
 }
 
@@ -213,30 +198,30 @@ function uid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Format number as currency using the expense's saved currency symbol */
-function fmt$(amount, currency = 'USD', symbol = '$') {
-  const currencyInfo = CURRENCIES[currency] || { symbol: '$' };
-  const displaySymbol = currencyInfo.symbol;
+/** Format number with the global active currency symbol */
+function fmt$(amount) {
+  const currencyInfo = CURRENCIES[activeCurrency] || { symbol: '₹', position: 'left' };
+  const symbol = currencyInfo.symbol;
+  const decimals = activeCurrency === 'INR' ? 0 : 2;
+  const formatted = amount.toFixed(decimals);
   
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: currency === 'INR' ? 0 : 2,
-    maximumFractionDigits: currency === 'INR' ? 0 : 2,
-  }).format(amount);
+  // Position symbol based on currency convention
+  if (currencyInfo.position === 'right') {
+    return `${formatted} ${symbol}`;
+  }
+  return `${symbol}${formatted}`;
 }
 
-/** Format amount with symbol only (no currency code) */
-function fmtWithSymbol(amount, currency = 'USD') {
-  const currencyInfo = CURRENCIES[currency] || { symbol: '$' };
+/** Format amount with symbol for display */
+function fmtWithSymbol(amount, currency = activeCurrency) {
+  const currencyInfo = CURRENCIES[currency] || { symbol: '₹', position: 'left' };
   const symbol = currencyInfo.symbol;
+  const decimals = currency === 'INR' ? 0 : 2;
   
-  // For currencies with symbol on right
-  if (['SEK', 'KWD', 'SAR'].includes(currency)) {
-    return `${amount.toFixed(2)} ${symbol}`;
+  if (currencyInfo.position === 'right') {
+    return `${amount.toFixed(decimals)} ${symbol}`;
   }
-  // For currencies with symbol on left
-  return `${symbol}${amount.toFixed(currency === 'INR' ? 0 : 2)}`;
+  return `${symbol}${amount.toFixed(decimals)}`;
 }
 
 /** ISO date string → "Sep 24, 2026" */
@@ -599,7 +584,7 @@ function initExpenseForm() {
     if (!validateForm()) return;
 
     const selectedCurrency = expenseCurrencySelect.value;
-    const currencyInfo = CURRENCIES[selectedCurrency] || { symbol: '$' };
+    const currencyInfo = CURRENCIES[selectedCurrency] || { symbol: '₹' };
 
     const entry = {
       id:            editingId ?? uid(),
@@ -615,17 +600,18 @@ function initExpenseForm() {
       currencySymbol: currencyInfo.symbol,
     };
 
+    // Update global currency and persist
+    activeCurrency = selectedCurrency;
+    localStorage.setItem(LS_CURRENCY, activeCurrency);
+
     if (editingId) {
       const idx = expenses.findIndex(x => x.id === editingId);
       if (idx !== -1) expenses[idx] = entry;
       showToast('Expense updated.', 'success');
     } else {
       expenses.unshift(entry);
-      showToast(`${fmt$(entry.amount, entry.currency, entry.currencySymbol)} added — ${entry.category}`, 'success');
+      showToast(`${fmt$(entry.amount)} added — ${entry.category}`, 'success');
     }
-
-    // Save preferred currency for future entries
-    localStorage.setItem('iq_expense_currency', selectedCurrency);
 
     editingId = null;
     submitLabel.textContent = 'Add Expense';
