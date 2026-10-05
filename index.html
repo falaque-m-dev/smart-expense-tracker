@@ -3,12 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>ExpenseIQ — Smart Expense Tracker</title>
+  <meta name="description" content="Track expenses, parse receipts, set budgets, view spending analytics, and export CSV, PDF, or JSON. Private by design — your data never leaves your browser." />
+  <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ExpenseIQ — Smart Expense Tracker" />
+  <meta property="og:description" content="Track expenses, parse receipts, set budgets, view spending analytics, and export CSV, PDF, or JSON. Private by design." />
+  <meta name="twitter:card" content="summary" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'sha256-YxN5MhGiN3RT7JtHkJcyD6ymCRErwDeGn8CE+hPmTQU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
-  <!-- html2pdf.js 0.10.x — loaded eagerly so the bundle is cached before first export -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
-  <!-- Chart.js 4.x -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- html2pdf.js 0.10.1 — pinned with SRI so the bundle cannot be tampered with -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
+    integrity="sha384-Yv5O+t3uE3hunW8uyrbpPW3iw6/5/Y7HitWJBLgqfMoA36NogMmy+8wWZMpn3HWc"
+    crossorigin="anonymous" defer></script>
+  <!-- Chart.js 4.5.1 — pinned with SRI -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+    integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+    crossorigin="anonymous" defer></script>
   <!-- Apply saved theme synchronously to prevent flash of wrong theme -->
   <script>
     (function () {
@@ -21,6 +37,13 @@
   </script>
 </head>
 <body>
+
+  <noscript>
+    <div style="max-width:560px;margin:64px auto;padding:24px;font-family:system-ui,sans-serif;text-align:center;color:#0f172a;">
+      <h1 style="font-size:20px;margin:0 0 8px;">ExpenseIQ needs JavaScript</h1>
+      <p style="margin:0;color:#475569;">Enable JavaScript in your browser to track and manage expenses.</p>
+    </div>
+  </noscript>
 
   <!-- ── Preloader Splash Screen ── -->
   <div id="preloader" class="preloader" role="status" aria-label="Loading ExpenseIQ">
@@ -39,7 +62,7 @@
   </div>
 
   <!-- ── Mobile top bar ── -->
-  <div class="mobile-topbar" aria-hidden="true">
+  <div class="mobile-topbar">
     <div class="mobile-brand">
       <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/>
@@ -455,8 +478,8 @@
               <path d="M16 8v8M32 8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M17 30h14M17 35h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".4"/>
             </svg>
-            <p class="empty-title">No expenses yet</p>
-            <p class="empty-body">Add your first expense using the form above.</p>
+            <p class="empty-title" id="emptyTitle">No expenses yet</p>
+            <p class="empty-body" id="emptyBody">Add your first expense using the form above.</p>
           </div>
         </div>
       </section>

@@ -47,9 +47,6 @@ let activeCurrency = 'INR';  // Global display currency
  *             currency:string, currencySymbol:string }} Expense
  */
 
-/** Canonical payment method options — single source of truth */
-const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Net Banking', 'Other'];
-
 /** Currency information map */
 const CURRENCIES = {
   INR: { symbol: '₹', name: 'Indian Rupee', position: 'left' },
@@ -115,6 +112,8 @@ const parseError      = get('parseError');
 const expenseTableBody  = get('expenseTableBody');
 const expenseTable      = get('expenseTable');
 const emptyState        = get('emptyState');
+const emptyTitle        = get('emptyTitle');
+const emptyBody         = get('emptyBody');
 const searchInput       = get('searchInput');
 const filterCategory    = get('filterCategory');
 const filterPayment     = get('filterPayment');
@@ -123,6 +122,7 @@ const clearAllBtn       = get('clearAllBtn');
 
 // ── Modal ──
 const modalBackdrop   = get('modalBackdrop');
+const modalTitle      = get('modalTitle');
 const modalBody       = get('modalBody');
 const modalCancelBtn  = get('modalCancelBtn');
 const modalConfirmBtn = get('modalConfirmBtn');
@@ -150,11 +150,42 @@ const toastEl = get('toast');
    3. LOCAL-STORAGE HELPERS
 ══════════════════════════════════════════ */
 
+/** Coerce a stored/imported record into a valid expense, or null when unusable */
+function normalizeExpense(raw) {
+  if (typeof raw !== 'object' || raw === null) return null;
+
+  const amount   = typeof raw.amount === 'number' && Number.isFinite(raw.amount) && raw.amount > 0
+    ? Math.round(raw.amount * 100) / 100
+    : null;
+  const category = typeof raw.category === 'string' && raw.category ? raw.category : null;
+  const date     = typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)
+    ? raw.date
+    : null;
+
+  if (amount === null || category === null || date === null) return null;
+
+  const currency = typeof raw.currency === 'string' && CURRENCIES[raw.currency]
+    ? raw.currency
+    : 'INR';
+
+  return {
+    id:            typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+    amount,
+    category,
+    date,
+    description:   typeof raw.description === 'string' ? raw.description.slice(0, 120) : '',
+    paymentMethod: typeof raw.paymentMethod === 'string' ? raw.paymentMethod : 'Other',
+    createdAt:     typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+    currency,
+    currencySymbol: CURRENCIES[currency].symbol,
+  };
+}
+
 function loadFromStorage() {
   try {
     const raw = localStorage.getItem(LS_EXPENSES);
-    expenses = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(expenses)) expenses = [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    expenses = Array.isArray(parsed) ? parsed.map(normalizeExpense).filter(Boolean) : [];
   } catch {
     expenses = [];
   }
@@ -183,10 +214,6 @@ function saveExpenses() {
 
 function saveBudget() {
   localStorage.setItem(LS_BUDGET, String(budget));
-}
-
-function saveCurrency() {
-  localStorage.setItem(LS_CURRENCY, currentCurrency);
 }
 
 /* ══════════════════════════════════════════
@@ -275,15 +302,20 @@ function showToast(msg, type = '', ms = 3000) {
 ══════════════════════════════════════════ */
 
 let _modalResolve = null;
+let _lastFocused  = null;
 
 /**
  * Show a modal and return a Promise<boolean>.
  * true = confirmed, false = cancelled.
  * @param {string} message
+ * @param {{ title?:string, confirmLabel?:string }} [opts]
  */
-function showModal(message) {
+function showModal(message, opts = {}) {
   return new Promise(resolve => {
     _modalResolve = resolve;
+    _lastFocused  = document.activeElement;
+    modalTitle.textContent       = opts.title        ?? 'Please confirm';
+    modalConfirmBtn.textContent  = opts.confirmLabel ?? 'Confirm';
     modalBody.textContent = message;
     modalBackdrop.classList.remove('hidden');
     modalBackdrop.setAttribute('aria-hidden', 'false');
@@ -295,6 +327,8 @@ function showModal(message) {
 function closeModal(result) {
   modalBackdrop.classList.add('hidden');
   modalBackdrop.setAttribute('aria-hidden', 'true');
+  if (_lastFocused && typeof _lastFocused.focus === 'function') _lastFocused.focus();
+  _lastFocused = null;
   if (_modalResolve) {
     _modalResolve(result);
     _modalResolve = null;
@@ -310,10 +344,23 @@ function initModal() {
     if (e.target === modalBackdrop) closeModal(false);
   });
 
-  // Close on Escape
+  // Escape closes; Tab is trapped between the two actions
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !modalBackdrop.classList.contains('hidden')) {
+    if (modalBackdrop.classList.contains('hidden')) return;
+
+    if (e.key === 'Escape') {
       closeModal(false);
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      const focusables = [modalCancelBtn, modalConfirmBtn];
+      const idx = focusables.indexOf(document.activeElement);
+      e.preventDefault();
+      const next = e.shiftKey
+        ? focusables[idx <= 0 ? focusables.length - 1 : idx - 1]
+        : focusables[idx === focusables.length - 1 ? 0 : idx + 1];
+      next.focus();
     }
   });
 }
@@ -640,7 +687,7 @@ function resetForm() {
   paymentMethodInput.value   = '';
   dateInput.value            = todayISO();
   descInput.value            = '';
-  expenseCurrencySelect.value = preferredExpenseCurrency;
+  expenseCurrencySelect.value = activeCurrency;
   clearValidation();
 }
 
@@ -853,7 +900,7 @@ function getFiltered() {
     if (!q) return true;
     return (
       e.category.toLowerCase().includes(q) ||
-      e.description.toLowerCase().includes(q) ||
+      (e.description || '').toLowerCase().includes(q) ||
       (e.paymentMethod || '').toLowerCase().includes(q) ||
       fmtDate(e.date).toLowerCase().includes(q) ||
       fmt$(e.amount).includes(q)
@@ -886,6 +933,13 @@ function renderTable() {
   const list = getFiltered();
 
   if (list.length === 0) {
+    const isFiltered = Boolean(
+      searchInput.value.trim() || filterCategory.value || filterPayment.value
+    );
+    emptyTitle.textContent = isFiltered ? 'No matching expenses' : 'No expenses yet';
+    emptyBody.textContent  = isFiltered
+      ? 'Try adjusting your search or filters.'
+      : 'Add your first expense using the form above.';
     expenseTable.classList.add('hidden');
     emptyState.classList.remove('hidden');
     return;
@@ -965,6 +1019,10 @@ function renderCharts() {
   // Show/hide empty states
   categoryChartEmpty.classList.toggle('show', list.length === 0);
   trendChartEmpty.classList.toggle('show', list.length === 0);
+  
+  if (typeof Chart === 'undefined') {
+    return; // Chart.js unavailable (offline or blocked CDN)
+  }
   
   if (list.length === 0) {
     return; // Nothing to chart
@@ -1166,7 +1224,8 @@ async function deleteExpense(id) {
   const currencySymbol = ex.currencySymbol || CURRENCIES[ex.currency]?.symbol || '$';
 
   const confirmed = await showModal(
-    `Delete the ${ex.category} expense of ${currencySymbol}${ex.amount.toFixed(ex.currency === 'INR' ? 0 : 2)} on ${fmtDate(ex.date)}? This cannot be undone.`
+    `Delete the ${ex.category} expense of ${currencySymbol}${ex.amount.toFixed(ex.currency === 'INR' ? 0 : 2)} on ${fmtDate(ex.date)}? This cannot be undone.`,
+    { title: 'Delete expense?', confirmLabel: 'Delete' }
   );
   if (!confirmed) return;
 
@@ -1205,7 +1264,8 @@ function initClearAll() {
     }
 
     const confirmed = await showModal(
-      `This will permanently delete all ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}. This cannot be undone.`
+      `This will permanently delete all ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}. This cannot be undone.`,
+      { title: 'Clear all expenses?', confirmLabel: 'Clear all' }
     );
     if (!confirmed) return;
 
@@ -1224,15 +1284,37 @@ function initClearAll() {
    Now uses per-expense currency storage.
 ══════════════════════════════════════════ */
 
-async function initCurrency() {
-  // Set initial expense currency selector value from localStorage
-  expenseCurrencySelect.value = preferredExpenseCurrency;
-  
-  // Remove old dashboard currency selector from DOM since it's no longer needed
-  const dashboardCurrencySelect = document.getElementById('currencySelect');
-  const dashboardCurrencyStatus = document.getElementById('currencyStatus');
-  if (dashboardCurrencySelect) dashboardCurrencySelect.parentElement.remove();
-  if (dashboardCurrencyStatus) dashboardCurrencyStatus.remove();
+function initCurrency() {
+  // Default the expense form to the last used currency
+  expenseCurrencySelect.value = activeCurrency;
+}
+
+/** Keep other open tabs in sync when storage changes elsewhere */
+function initCrossTabSync() {
+  window.addEventListener('storage', e => {
+    if (e.key === LS_THEME) {
+      if (e.newValue === 'light' || e.newValue === 'dark') applyTheme(e.newValue);
+      return;
+    }
+
+    const relevant = e.key === null || e.key === LS_EXPENSES || e.key === LS_BUDGET || e.key === LS_CURRENCY;
+    if (!relevant) return;
+
+    loadFromStorage();
+    expenseCurrencySelect.value = activeCurrency;
+    calcTotals();
+    renderTable();
+    renderCharts();
+  });
+}
+
+/** Register the offline service worker when served over http(s) */
+function initServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
 }
 
 /* ══════════════════════════════════════════
@@ -1280,9 +1362,10 @@ function exportToCSV() {
     e.currencySymbol || CURRENCIES[e.currency]?.symbol || '₹',
   ]);
 
-  // RFC 4180 — quote fields containing commas, quotes, or newlines
+  // RFC 4180 quoting + spreadsheet formula-injection guard
   const escape = val => {
-    const s = String(val);
+    let s = String(val);
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return (s.includes(',') || s.includes('"') || s.includes('\n'))
       ? `"${s.replace(/"/g, '""')}"`
       : s;
@@ -1292,7 +1375,8 @@ function exportToCSV() {
     .map(row => row.map(escape).join(','))
     .join('\r\n');
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  // BOM so Excel detects UTF-8 (₹, €, accents)
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   triggerDownload(blob, `expenses-${exportDateStamp()}.csv`);
   showToast(`Exported ${list.length} expense${list.length !== 1 ? 's' : ''} to CSV.`, 'success');
 }
@@ -1441,14 +1525,7 @@ function restoreJSON(file) {
     }
 
     // Validate each entry has the minimum required fields
-    const valid = parsed.filter(item =>
-      typeof item === 'object' &&
-      item !== null &&
-      typeof item.id === 'string' &&
-      typeof item.amount === 'number' &&
-      typeof item.category === 'string' &&
-      typeof item.date === 'string'
-    );
+    const valid = parsed.map(normalizeExpense).filter(Boolean);
 
     if (valid.length === 0) {
       showToast('No valid expense records found in the backup.', 'error');
@@ -1456,14 +1533,17 @@ function restoreJSON(file) {
     }
 
     const confirmed = await showModal(
-      `This will replace your current ${expenses.length} expense${expenses.length !== 1 ? 's' : ''} with ${valid.length} record${valid.length !== 1 ? 's' : ''} from the backup. This cannot be undone.`
+      `This will replace your current ${expenses.length} expense${expenses.length !== 1 ? 's' : ''} with ${valid.length} record${valid.length !== 1 ? 's' : ''} from the backup. This cannot be undone.`,
+      { title: 'Restore backup?', confirmLabel: 'Restore' }
     );
     if (!confirmed) return;
 
     expenses = valid;
+    cancelEdit();
     saveExpenses();
     calcTotals();
     renderTable();
+    renderCharts();
     showToast(`Restored ${valid.length} expense${valid.length !== 1 ? 's' : ''} from backup.`, 'success');
   };
 
@@ -1546,6 +1626,11 @@ function init() {
   initClearAll();
   initExport();     // Task 4
   initCurrency();   // Task 5
+  initCrossTabSync();
+  initServiceWorker();
+
+  // Re-colour charts when the theme changes
+  document.addEventListener('themechange', renderCharts);
 
   // Initial render
   calcTotals();
