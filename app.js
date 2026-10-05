@@ -9,18 +9,21 @@
      4. Utility helpers
      5. Toast
      6. Modal (replaces window.confirm)
-     7. Mobile sidebar toggle
-     8. Sidebar scroll-spy nav
-     9. Budget metrics & progress bar
-    10. Inline budget editing
-    11. Form validation
-    12. Expense form (add / update)
-    13. Receipt parser (regex engine)
-    14. Expense table rendering
-    15. Table event delegation (edit / delete)
-    16. History controls (search / filter / sort)
-    17. Clear-all
-    18. Bootstrap
+     7. Theme engine
+     8. Mobile sidebar toggle
+     9. Sidebar scroll-spy nav
+    10. Budget metrics & progress bar
+    11. Inline budget editing
+    12. Form validation
+    13. Expense form (add / update)
+    14. Receipt parser (regex engine)
+    15. Expense table rendering
+    16. Table event delegation (edit / delete)
+    17. History controls (search / filter / sort)
+    18. Clear all
+    19. Currency system
+    20. Export & backup
+    21. Bootstrap
    ═══════════════════════════════════════════════════════ */
 
 'use strict';
@@ -47,17 +50,6 @@ let ratesFetchTime  = 0;          // Last successful fetch timestamp
  *             date:string, description:string,
  *             paymentMethod:string, createdAt:number }} Expense
  */
-
-/** Canonical payment method options — single source of truth */
-const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Net Banking', 'Other'];
-
-/** Currency symbols */
-const CURRENCY_SYMBOLS = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  INR: '₹',
-};
 
 /** Offline fallback rates (approximate, for when API is unreachable) */
 const FALLBACK_RATES = {
@@ -121,6 +113,8 @@ const parseError      = get('parseError');
 const expenseTableBody  = get('expenseTableBody');
 const expenseTable      = get('expenseTable');
 const emptyState        = get('emptyState');
+const emptyTitle        = get('emptyTitle');
+const emptyBody         = get('emptyBody');
 const searchInput       = get('searchInput');
 const filterCategory    = get('filterCategory');
 const filterPayment     = get('filterPayment');
@@ -129,6 +123,7 @@ const clearAllBtn       = get('clearAllBtn');
 
 // ── Modal ──
 const modalBackdrop   = get('modalBackdrop');
+const modalTitle      = get('modalTitle');
 const modalBody       = get('modalBody');
 const modalCancelBtn  = get('modalCancelBtn');
 const modalConfirmBtn = get('modalConfirmBtn');
@@ -143,10 +138,7 @@ const restoreJsonInput= get('restoreJsonInput');
 // ── Currency ──
 const currencySelect     = get('currencySelect');
 const currencyStatus     = get('currencyStatus');
-const currencyStatusIndicator = get('currencyStatusIndicator');
 const currencyStatusText = get('currencyStatusText');
-const modalCancelBtn  = get('modalCancelBtn');
-const modalConfirmBtn = get('modalConfirmBtn');
 
 // ── Toast ──
 const toastEl = get('toast');
@@ -155,11 +147,36 @@ const toastEl = get('toast');
    3. LOCAL-STORAGE HELPERS
 ══════════════════════════════════════════ */
 
+/** Coerce a stored/imported record into a valid expense, or null when unusable */
+function normalizeExpense(raw) {
+  if (typeof raw !== 'object' || raw === null) return null;
+
+  const amount   = typeof raw.amount === 'number' && Number.isFinite(raw.amount) && raw.amount > 0
+    ? Math.round(raw.amount * 100) / 100
+    : null;
+  const category = typeof raw.category === 'string' && raw.category ? raw.category : null;
+  const date     = typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date)
+    ? raw.date
+    : null;
+
+  if (amount === null || category === null || date === null) return null;
+
+  return {
+    id:            typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+    amount,
+    category,
+    date,
+    description:   typeof raw.description === 'string' ? raw.description.slice(0, 120) : '',
+    paymentMethod: typeof raw.paymentMethod === 'string' ? raw.paymentMethod : 'Other',
+    createdAt:     typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+  };
+}
+
 function loadFromStorage() {
   try {
     const raw = localStorage.getItem(LS_EXPENSES);
-    expenses = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(expenses)) expenses = [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    expenses = Array.isArray(parsed) ? parsed.map(normalizeExpense).filter(Boolean) : [];
   } catch {
     expenses = [];
   }
@@ -194,6 +211,24 @@ function saveCurrency() {
   localStorage.setItem(LS_CURRENCY, currentCurrency);
 }
 
+/** Keep other open tabs in sync when storage changes elsewhere */
+function initCrossTabSync() {
+  window.addEventListener('storage', e => {
+    if (e.key === LS_THEME) {
+      if (e.newValue === 'light' || e.newValue === 'dark') applyTheme(e.newValue);
+      return;
+    }
+
+    const relevant = e.key === null || e.key === LS_EXPENSES || e.key === LS_BUDGET || e.key === LS_CURRENCY;
+    if (!relevant) return;
+
+    loadFromStorage();
+    currencySelect.value = currentCurrency;
+    calcTotals();
+    renderTable();
+  });
+}
+
 /* ══════════════════════════════════════════
    4. UTILITY HELPERS
 ══════════════════════════════════════════ */
@@ -206,8 +241,7 @@ function uid() {
 /** Format number as currency using the current display currency */
 function fmt$(n) {
   const convertedAmount = convertCurrency(n, 'USD', currentCurrency);
-  const symbol = CURRENCY_SYMBOLS[currentCurrency] || currentCurrency;
-  
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency', 
     currency: currentCurrency,
@@ -284,11 +318,12 @@ async function fetchExchangeRates() {
   }
   
   try {
-    const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,INR');
+    const response = await fetch('https://api.frankfurter.dev/v2/rates?base=USD&quotes=EUR,GBP,INR');
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     
     const data = await response.json();
-    exchangeRates = { USD: 1, ...data.rates };
+    exchangeRates = { USD: 1 };
+    for (const { quote, rate } of data) exchangeRates[quote] = rate;
     ratesFetchTime = Date.now();
     
     // Cache the result
@@ -368,15 +403,20 @@ function showToast(msg, type = '', ms = 3000) {
 ══════════════════════════════════════════ */
 
 let _modalResolve = null;
+let _lastFocused  = null;
 
 /**
  * Show a modal and return a Promise<boolean>.
  * true = confirmed, false = cancelled.
  * @param {string} message
+ * @param {{ title?:string, confirmLabel?:string }} [opts]
  */
-function showModal(message) {
+function showModal(message, opts = {}) {
   return new Promise(resolve => {
     _modalResolve = resolve;
+    _lastFocused  = document.activeElement;
+    modalTitle.textContent       = opts.title       ?? 'Please confirm';
+    modalConfirmBtn.textContent  = opts.confirmLabel ?? 'Confirm';
     modalBody.textContent = message;
     modalBackdrop.classList.remove('hidden');
     modalBackdrop.setAttribute('aria-hidden', 'false');
@@ -388,6 +428,8 @@ function showModal(message) {
 function closeModal(result) {
   modalBackdrop.classList.add('hidden');
   modalBackdrop.setAttribute('aria-hidden', 'true');
+  if (_lastFocused && typeof _lastFocused.focus === 'function') _lastFocused.focus();
+  _lastFocused = null;
   if (_modalResolve) {
     _modalResolve(result);
     _modalResolve = null;
@@ -403,10 +445,23 @@ function initModal() {
     if (e.target === modalBackdrop) closeModal(false);
   });
 
-  // Close on Escape
+  // Escape closes; Tab is trapped between the two actions
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !modalBackdrop.classList.contains('hidden')) {
+    if (modalBackdrop.classList.contains('hidden')) return;
+
+    if (e.key === 'Escape') {
       closeModal(false);
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      const focusables = [modalCancelBtn, modalConfirmBtn];
+      const idx = focusables.indexOf(document.activeElement);
+      e.preventDefault();
+      const next = e.shiftKey
+        ? focusables[idx <= 0 ? focusables.length - 1 : idx - 1]
+        : focusables[idx === focusables.length - 1 ? 0 : idx + 1];
+      next.focus();
     }
   });
 }
@@ -483,7 +538,7 @@ function closeMobileSidebar() {
 }
 
 /* ══════════════════════════════════════════
-   8. SIDEBAR SCROLL-SPY NAV
+   9. SIDEBAR SCROLL-SPY NAV
    Uses IntersectionObserver to highlight the
    nav item whose section is most visible.
 ══════════════════════════════════════════ */
@@ -547,7 +602,7 @@ function initScrollSpy() {
 }
 
 /* ══════════════════════════════════════════
-   9. BUDGET METRICS & PROGRESS BAR
+   10. BUDGET METRICS & PROGRESS BAR
 ══════════════════════════════════════════ */
 
 function calcTotals() {
@@ -582,7 +637,7 @@ function calcTotals() {
 }
 
 /* ══════════════════════════════════════════
-   10. INLINE BUDGET EDITING
+   11. INLINE BUDGET EDITING
 ══════════════════════════════════════════ */
 
 function initBudgetEdit() {
@@ -619,7 +674,7 @@ function commitBudget() {
 }
 
 /* ══════════════════════════════════════════
-   11. FORM VALIDATION
+   12. FORM VALIDATION
 ══════════════════════════════════════════ */
 
 function clearValidation() {
@@ -665,7 +720,7 @@ function validateForm() {
 }
 
 /* ══════════════════════════════════════════
-   12. EXPENSE FORM — ADD / UPDATE
+   13. EXPENSE FORM — ADD / UPDATE
 ══════════════════════════════════════════ */
 
 function initExpenseForm() {
@@ -726,7 +781,7 @@ function resetForm() {
 }
 
 /* ══════════════════════════════════════════
-   13. RECEIPT PARSER — REGEX ENGINE
+   14. RECEIPT PARSER — REGEX ENGINE
    Extracts vendor, total, date from raw text.
 ══════════════════════════════════════════ */
 
@@ -905,7 +960,7 @@ function clearParser() {
 }
 
 /* ══════════════════════════════════════════
-   14. EXPENSE TABLE RENDERING
+   15. EXPENSE TABLE RENDERING
 ══════════════════════════════════════════ */
 
 /** Per-category colour dot CSS class */
@@ -934,7 +989,7 @@ function getFiltered() {
     if (!q) return true;
     return (
       e.category.toLowerCase().includes(q) ||
-      e.description.toLowerCase().includes(q) ||
+      (e.description || '').toLowerCase().includes(q) ||
       (e.paymentMethod || '').toLowerCase().includes(q) ||
       fmtDate(e.date).toLowerCase().includes(q) ||
       fmt$(e.amount).includes(q)
@@ -967,6 +1022,13 @@ function renderTable() {
   const list = getFiltered();
 
   if (list.length === 0) {
+    const isFiltered = Boolean(
+      searchInput.value.trim() || filterCategory.value || filterPayment.value
+    );
+    emptyTitle.textContent = isFiltered ? 'No matching expenses' : 'No expenses yet';
+    emptyBody.textContent  = isFiltered
+      ? 'Try adjusting your search or filters.'
+      : 'Add your first expense using the form above.';
     expenseTable.classList.add('hidden');
     emptyState.classList.remove('hidden');
     return;
@@ -1016,7 +1078,7 @@ function renderTable() {
 }
 
 /* ══════════════════════════════════════════
-   15. TABLE EVENT DELEGATION
+   16. TABLE EVENT DELEGATION
 ══════════════════════════════════════════ */
 
 function initTableEvents() {
@@ -1054,7 +1116,8 @@ async function deleteExpense(id) {
   if (!ex) return;
 
   const confirmed = await showModal(
-    `Delete the ${ex.category} expense of ${fmt$(ex.amount)} on ${fmtDate(ex.date)}? This cannot be undone.`
+    `Delete the ${ex.category} expense of ${fmt$(ex.amount)} on ${fmtDate(ex.date)}? This cannot be undone.`,
+    { title: 'Delete expense?', confirmLabel: 'Delete' }
   );
   if (!confirmed) return;
 
@@ -1070,7 +1133,7 @@ async function deleteExpense(id) {
 }
 
 /* ══════════════════════════════════════════
-   16. HISTORY CONTROLS
+   17. HISTORY CONTROLS
 ══════════════════════════════════════════ */
 
 function initHistoryControls() {
@@ -1081,7 +1144,7 @@ function initHistoryControls() {
 }
 
 /* ══════════════════════════════════════════
-   17. CLEAR ALL
+   18. CLEAR ALL
 ══════════════════════════════════════════ */
 
 function initClearAll() {
@@ -1092,7 +1155,8 @@ function initClearAll() {
     }
 
     const confirmed = await showModal(
-      `This will permanently delete all ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}. This cannot be undone.`
+      `This will permanently delete all ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}. This cannot be undone.`,
+      { title: 'Clear all expenses?', confirmLabel: 'Clear all' }
     );
     if (!confirmed) return;
 
@@ -1106,7 +1170,7 @@ function initClearAll() {
 }
 
 /* ══════════════════════════════════════════
-   16. CURRENCY SYSTEM  (Task 5)
+   19. CURRENCY SYSTEM  (Task 5)
 ══════════════════════════════════════════ */
 
 async function initCurrency() {
@@ -1115,6 +1179,10 @@ async function initCurrency() {
   
   // Fetch exchange rates
   await fetchExchangeRates();
+
+  // Rates just (re)loaded — refresh amounts so converted values are accurate
+  calcTotals();
+  renderTable();
   
   // Wire currency selector
   currencySelect.addEventListener('change', async () => {
@@ -1130,7 +1198,7 @@ async function initCurrency() {
 }
 
 /* ══════════════════════════════════════════
-   17. EXPORT & BACKUP  (Task 4)
+   20. EXPORT & BACKUP  (Task 4)
 ══════════════════════════════════════════ */
 
 /** Trigger a browser download for any Blob */
@@ -1169,13 +1237,14 @@ function exportToCSV() {
     e.description || '',
     e.category,
     e.paymentMethod || 'Other',
-    e.amount.toFixed(2),
-    'USD',
+    convertCurrency(e.amount, 'USD', currentCurrency).toFixed(2),
+    currentCurrency,
   ]);
 
-  // RFC 4180 — quote fields containing commas, quotes, or newlines
+  // RFC 4180 quoting + spreadsheet formula-injection guard
   const escape = val => {
-    const s = String(val);
+    let s = String(val);
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return (s.includes(',') || s.includes('"') || s.includes('\n'))
       ? `"${s.replace(/"/g, '""')}"`
       : s;
@@ -1185,7 +1254,8 @@ function exportToCSV() {
     .map(row => row.map(escape).join(','))
     .join('\r\n');
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  // BOM so Excel detects UTF-8 (₹, €, accents)
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   triggerDownload(blob, `expenses-${exportDateStamp()}.csv`);
   showToast(`Exported ${list.length} expense${list.length !== 1 ? 's' : ''} to CSV.`, 'success');
 }
@@ -1334,14 +1404,7 @@ function restoreJSON(file) {
     }
 
     // Validate each entry has the minimum required fields
-    const valid = parsed.filter(item =>
-      typeof item === 'object' &&
-      item !== null &&
-      typeof item.id === 'string' &&
-      typeof item.amount === 'number' &&
-      typeof item.category === 'string' &&
-      typeof item.date === 'string'
-    );
+    const valid = parsed.map(normalizeExpense).filter(Boolean);
 
     if (valid.length === 0) {
       showToast('No valid expense records found in the backup.', 'error');
@@ -1349,11 +1412,13 @@ function restoreJSON(file) {
     }
 
     const confirmed = await showModal(
-      `This will replace your current ${expenses.length} expense${expenses.length !== 1 ? 's' : ''} with ${valid.length} record${valid.length !== 1 ? 's' : ''} from the backup. This cannot be undone.`
+      `This will replace your current ${expenses.length} expense${expenses.length !== 1 ? 's' : ''} with ${valid.length} record${valid.length !== 1 ? 's' : ''} from the backup. This cannot be undone.`,
+      { title: 'Restore backup?', confirmLabel: 'Restore' }
     );
     if (!confirmed) return;
 
     expenses = valid;
+    cancelEdit();
     saveExpenses();
     calcTotals();
     renderTable();
@@ -1381,8 +1446,16 @@ function initExport() {
 }
 
 /* ══════════════════════════════════════════
-   18. BOOTSTRAP
+   21. BOOTSTRAP
 ══════════════════════════════════════════ */
+
+function initServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 
 function init() {
   loadFromStorage();
@@ -1401,6 +1474,9 @@ function init() {
   initHistoryControls();
   initClearAll();
   initExport();     // Task 4
+  initCurrency();   // Task 5 — async; re-renders amounts once rates resolve
+  initCrossTabSync();
+  initServiceWorker();
 
   // Initial render
   calcTotals();
